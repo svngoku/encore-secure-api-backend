@@ -57,6 +57,12 @@ type RegenerateKeyResponse struct {
 	NewAPIKey string `json:"new_api_key"`
 }
 
+// ProfileResponse contains the user profile information
+type ProfileResponse struct {
+	ID    int64  `json:"id"`
+	Email string `json:"email"`
+}
+
 // generateAPIKey generates a unique API key with the prefix "esk_"
 func generateAPIKey() (string, error) {
 	// Generate 16 bytes of random data (32 characters when hex-encoded)
@@ -250,4 +256,36 @@ func Protected(ctx context.Context, params *ProtectedParams) (*ProtectedResponse
 		}
 	}
 	return &ProtectedResponse{Message: "Protected data for " + string(userID) + ": " + params.Data}, nil
+}
+
+//encore:api auth method=GET path=/profile
+func Profile(ctx context.Context) (*ProfileResponse, error) {
+	// Get authenticated user ID (email in this case)
+	userID, ok := auth.UserID()
+	if !ok {
+		return nil, &errs.Error{
+			Code:    errs.Unauthenticated,
+			Message: "user not authenticated",
+		}
+	}
+
+	// Fetch user details from database
+	var user User
+	err := db.QueryRow(ctx, `
+		SELECT id, email
+		FROM users
+		WHERE email = $1
+	`, string(userID)).Scan(&user.ID, &user.Email)
+	if err != nil {
+		rlog.Error("failed to fetch user profile", "error", err, "userID", userID)
+		return nil, &errs.Error{
+			Code:    errs.Internal,
+			Message: "failed to fetch user profile",
+		}
+	}
+
+	return &ProfileResponse{
+		ID:    user.ID,
+		Email: user.Email,
+	}, nil
 }
